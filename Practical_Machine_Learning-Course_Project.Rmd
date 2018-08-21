@@ -1,0 +1,165 @@
+---
+title: "Practical Machine Learning (Prediction Assignment Writeup)"
+author: "Ehsan Pourhadi"
+date: "August 21, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+The aim of the project is to fit a Machine Learning model in order to predict the way some weight exercises were performed given data about the movement of subjects. For full information about the data, please visit http://groupware.les.inf.puc-rio.br/har
+
+##Source of Data
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+## Loading the Dataset
+Set the directory where your source file is
+```{r, echo = TRUE}
+setwd("F:/coursera.org/Course 8-Practical Machine Learning/week 4/course project")
+```
+We now load the dataset and understanting concerning with the data.
+
+```{r, echo = TRUE}
+library(lattice)
+library(ggplot2)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+library(rattle)
+library(randomForest)
+library(RColorBrewer)
+```
+
+```{r, echo = TRUE}
+set.seed(1813)
+```
+### Data Cleaning
+```{r, echo = TRUE}
+training <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testing  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+dt_train <- read.csv(url(training), strip.white = TRUE, na.strings = c("NA",""))
+dt_test  <- read.csv(url(testing),  strip.white = TRUE, na.strings = c("NA",""))
+```
+
+```{r, echo = TRUE}
+dim(dt_train)
+dim(dt_test)
+```
+we Create two partitions (75 % and 25 %) within the initiall training dataset.
+
+```{r, echo = TRUE}
+in_train  <- createDataPartition(dt_train$classe, p=0.75, list=FALSE)
+train_set <- dt_train[ in_train, ]
+test_set  <- dt_train[-in_train, ]
+```
+
+```{r, echo = TRUE}
+dim(train_set)
+dim(test_set)
+```
+
+The two datasets (train_set and test_set) have a large number of NA values as well as near-zero-variance (Non_Z.V.) variables. Both will be removed together with their ID variables.
+
+```{r, echo = TRUE}
+nonzv_var <- nearZeroVar(train_set)
+train_set <- train_set[ , -nonzv_var]
+test_set  <- test_set [ , -nonzv_var]
+dim(train_set)
+dim(test_set)
+```
+
+Remove variables that are mostly NA. A threshlod of 95 % is taken.
+```{r, echo = TRUE}
+na_var <- sapply(train_set, function(x) mean(is.na(x))) > 0.95
+train_set <- train_set[ , na_var == FALSE]
+test_set  <- test_set [ , na_var == FALSE]
+```
+
+```{r, echo = TRUE}
+dim(train_set)
+dim(test_set)
+```
+As we know that the columns 1 to 5 are identification variables only, they would be removed too.
+```{r, echo = TRUE}
+train_set <- train_set[ , -(1:5)]
+test_set  <- test_set [ , -(1:5)]
+dim(train_set)
+dim(test_set)
+```
+Hence, for the analysis, the number of variables has been decreased from the original 160 down to 54.
+
+## Analysis of Correlation of variables 
+
+Before the the prediction modeling, we Perform a correlation analysis between the variables. Pick "FPC" for the first principal component order.
+
+
+```{r, echo = TRUE}
+corr_matrix <- cor(train_set[ , -54])
+corrplot(corr_matrix, order = "FPC", method = "circle", type = "lower",
+         tl.cex = 0.6, tl.col = rgb(0, 0, 0))
+```        
+
+If two variables are highly correlated their colors are either dark blue (for a positive correlation) or dark red (for a negative corraltions). To further reduce the number of variables, a Principal Components Analysis (PCA) could be performed as the next step. However, since there are only very few strong correlations among the input variables, the PCA will not be performed. In fact, a few different prediction models will be made next.
+
+## Models of Prediction 
+
+###Decision Tree Model
+
+```{r, echo = TRUE}
+set.seed(1813)
+fit_decision_tree <- rpart(classe ~ ., data = train_set, method="class")
+fancyRpartPlot(fit_decision_tree)
+```
+
+
+Predictions of the decision tree model on test_set.
+```{r, echo = TRUE}
+predict_decision_tree <- predict(fit_decision_tree, newdata = test_set, type="class")
+conf_matrix_decision_tree <- confusionMatrix(predict_decision_tree, test_set$classe)
+conf_matrix_decision_tree
+```
+
+
+The predictive accuracy of the decision tree model is relatively low at 74.9 %.
+
+Plot the predictive accuracy of the decision tree model.
+```{r, echo = TRUE}
+plot(conf_matrix_decision_tree$table, col = conf_matrix_decision_tree$byClass, 
+     main = paste("Decision Tree Model: Predictive Accuracy =",
+                  round(conf_matrix_decision_tree$overall['Accuracy'], 4)))
+```                  
+Here, the algorithm which will be applied for the predictive model is Random Forest.
+
+```{r, echo = TRUE}
+set.seed(1813)
+modFitRF <- randomForest(classe ~ ., data = train_set, ntree = 100)
+```
+##Predicting on the Testing Data
+```{r, echo = TRUE}
+predictionDT <- predict(fit_decision_tree, dt_test, type = "class")
+predictionDT
+```
+##Predicting Random Forest
+```{r, echo = TRUE}
+predictionRF <- predict(modFitRF, dt_test, type = "class")
+predictionRF
+```
+
+```{r, echo = TRUE}
+predict_RF <- predict(modFitRF, newdata = test_set)
+conf_matrix_RF <- confusionMatrix(predict_RF, test_set$classe)
+conf_matrix_RF
+```
+
+##Conclusion
+We observe from the confusion matrix that the Random Forest model is very accurate, approximately 99%. For this reason, we could expect nearly all of the submitted test cases to be correct. It turned out they were all correct.
